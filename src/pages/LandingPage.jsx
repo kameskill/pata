@@ -1,14 +1,18 @@
 import React from 'react'
+import { useCart } from "../context/Cart";
 import supabase from '../config/Client';
 import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router';
+import { useNavigate } from "react-router";
 import MenuCard from '../components/MenuCard';
 
 function LandingPage() {
-  const [open, setOpen] = useState(false)
-  const [featuredMenu, setFeaturedMenu] = useState([])
-  const [menu, setMenu] = useState([])
-  const [loading, setLoading] = useState(true)
+  const navigate = useNavigate();
+  const { addToCart } = useCart();
+  const [open, setOpen] = useState(false);
+  const [featuredMenu, setFeaturedMenu] = useState([]);
+  const [menu, setMenu] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -56,13 +60,18 @@ function LandingPage() {
               <li>
                 <NavLink to="/menu" className={linkClass}>Menu</NavLink>
               </li>
+              <li>
+                <NavLink
+                  to="/login">Log in / Sign up
+                </NavLink>
+              </li>
               <NavLink
-                to="/login"
+                to="/menu"
                 onClick={() => setOpen(false)}
                 className="px-3 py-1 rounded-full bg-black text-white font-semibold
-             hover:bg-neutral-800 active:scale-95 transition"
+             hover:bg-neutral-800 active:scale-95 transition flex flex-row gap-2 items-center"
               >
-                Login / Sign up
+                <i class="fa-solid fa-cart-shopping"></i>Order Now!
               </NavLink>
             </ul>
           </nav>
@@ -105,11 +114,16 @@ function LandingPage() {
               </li>
               <li>
                 <NavLink
-                  to="/login"
+                  to="/login">Log in / Sign up
+                </NavLink>
+              </li>
+              <li>
+                <NavLink
+                  to="/menu"
                   onClick={() => setOpen(false)}
-                  className={linkClass}
+                  className=" flex flex-row gap-2 items-center"
                 >
-                  Login / Sign up
+                  <i class="fa-solid fa-cart-shopping"></i>Order Now!
                 </NavLink>
               </li>
             </ul>
@@ -143,7 +157,10 @@ function LandingPage() {
                 weight={item.weight}
                 prepTime={`${item.prep_time} mins`}
                 price={item.price}
-                onAdd={() => alert(`${item.name} is added to cart`, item)}
+                onAdd={() => {
+                  addToCart(item);
+                  navigate("/menu");
+                }}
               />
             ))}
           </div>
@@ -160,7 +177,10 @@ function LandingPage() {
                 weight={item.weight}
                 prepTime={`${item.prep_time} mins`}
                 price={item.price}
-                onAdd={() => alert(`${item.name} is added to cart`, item)}
+                onAdd={() => {
+                  addToCart(item);
+                  navigate("/menu");
+                }}
               />
             ))}
           </div>

@@ -1,14 +1,18 @@
 import React from 'react'
+import CartModal from "../components/CartModal";
+import { useCart } from "../context/Cart";
 import supabase from '../config/Client';
 import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router';
 import MenuCard from '../components/MenuCard';
 
 function MenuPage() {
-  const [open, setOpen] = useState(false)
-  const [featuredMenu, setFeaturedMenu] = useState([])
-  const [menu, setMenu] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [cartOpen, setCartOpen] = useState(false);
+  const { cart, addToCart } = useCart();
+  const [open, setOpen] = useState(false);
+  const [featuredMenu, setFeaturedMenu] = useState([]);
+  const [menu, setMenu] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -47,7 +51,6 @@ function MenuPage() {
           <h1 className="text-xl md:text-4xl font-bold">
             Crispy Pata sa A.Luna
           </h1>
-
           <nav className="hidden md:block">
             <ul className="flex gap-6 text-lg">
               <li>
@@ -56,14 +59,31 @@ function MenuPage() {
               <li>
                 <NavLink to="/menu" className={linkClass}>Menu</NavLink>
               </li>
-              <NavLink
-                to="/login"
-                onClick={() => setOpen(false)}
-                className="px-3 py-1 rounded-full bg-black text-white font-semibold
-             hover:bg-neutral-800 active:scale-95 transition"
-              >
-                Login / Sign up
-              </NavLink>
+              <li>
+                <NavLink
+                  to="/login">Log in / Sign up
+                </NavLink>
+              </li>
+              <li>
+                <button
+                  onClick={() => setCartOpen(true)}
+                  className="relative px-3 py-1 rounded-full bg-black text-white font-semibold
+             hover:bg-neutral-800 active:scale-95 transition
+             flex flex-row gap-2 items-center"
+                >
+                  <i className="fa-solid fa-cart-shopping"></i>
+                  Cart
+
+                  {cart?.length > 0 && (
+                    <span
+                      className="absolute -top-2 -right-2 bg-white text-black text-xs font-bold
+                 rounded-full px-2"
+                    >
+                      {cart.reduce((sum, item) => sum + item.quantity, 0)}
+                    </span>
+                  )}
+                </button>
+              </li>
             </ul>
           </nav>
 
@@ -91,8 +111,28 @@ function MenuPage() {
           className={`md:hidden overflow-hidden transition-all duration-300 ${open ? "max-h-60 opacity-100" : "max-h-0 opacity-0"
             }`}
         >
-          <nav className="px-4 pb-6">
+          <nav className="px-4 pb-6 mt-1">
             <ul className="flex flex-col gap-4 text-lg">
+              <li>
+                <button
+                  onClick={() => setCartOpen(true)}
+                  className="relative px-3 py-1 rounded-full bg-black text-white font-semibold
+             hover:bg-neutral-800 active:scale-95 transition
+             flex flex-row gap-2 items-center"
+                >
+                  <i className="fa-solid fa-cart-shopping"></i>
+                  Cart
+
+                  {cart?.length > 0 && (
+                    <span
+                      className="absolute -top-2 -right-2 bg-white text-black text-xs font-bold
+                 rounded-full px-2"
+                    >
+                      {cart.reduce((sum, item) => sum + item.quantity, 0)}
+                    </span>
+                  )}
+                </button>
+              </li>
               <li>
                 <NavLink to="/" className={linkClass} onClick={() => setOpen(false)}>
                   Home
@@ -105,15 +145,12 @@ function MenuPage() {
               </li>
               <li>
                 <NavLink
-                  to="/login"
-                  onClick={() => setOpen(false)}
-                  className={linkClass}
-                >
-                  Login / Sign up
+                  to="/login">Log in / Sign up
                 </NavLink>
               </li>
             </ul>
           </nav>
+
         </div>
       </header>
       <main className="flex min-h-screen flex-col w-full space-y-6 mt-5">
@@ -129,7 +166,7 @@ function MenuPage() {
                 weight={item.weight}
                 prepTime={`${item.prep_time} mins`}
                 price={item.price}
-                onAdd={() => alert(`${item.name} is added to cart`, item)}
+                onAdd={() => addToCart(item)}
               />
             ))}
           </div>
@@ -146,11 +183,15 @@ function MenuPage() {
                 weight={item.weight}
                 prepTime={`${item.prep_time} mins`}
                 price={item.price}
-                onAdd={() => alert(`${item.name} is added to cart`, item)}
+                onAdd={() => addToCart(item)}
               />
             ))}
           </div>
         </section>
+        <CartModal
+          open={cartOpen}
+          onClose={() => setCartOpen(false)}
+        />
       </main>
     </>
   )
