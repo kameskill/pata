@@ -1,0 +1,173 @@
+import React from 'react'
+import supabase from '../config/Client';
+import { useEffect, useState } from 'react'
+import { NavLink } from 'react-router';
+import MenuCard from '../components/MenuCard';
+
+function LandingPage() {
+  const [open, setOpen] = useState(false)
+  const [featuredMenu, setFeaturedMenu] = useState([])
+  const [menu, setMenu] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const { data: featured, error: fErr } = await supabase
+        .from('menu_items')
+        .select('*')
+        .eq('is_featured', true)
+
+      const { data: regular, error: rErr } = await supabase
+        .from('menu_items')
+        .select('*')
+        .eq('is_featured', false)
+
+      if (fErr || rErr) {
+        console.error(fErr || rErr)
+      } else {
+        setFeaturedMenu(featured)
+        setMenu(regular)
+      }
+
+      setLoading(false)
+    }
+
+    fetchData()
+  }, [])
+
+  const linkClass = ({ isActive }) =>
+    `relative py-2 ${isActive
+      ? "after:absolute after:left-0 after:bottom-0 after:w-full after:h-[2px] after:bg-black"
+      : ""
+    }`;
+  return (
+    <>
+      <header className="w-full bg-white border-b border-gray-300">
+        <div className="flex items-center justify-between max-w-7xl mx-auto p-4 md:p-8">
+          <h1 className="text-xl md:text-4xl font-bold">
+            Crispy Pata sa A.Luna
+          </h1>
+
+          <nav className="hidden md:block">
+            <ul className="flex gap-6 text-lg">
+              <li>
+                <NavLink to="/" className={linkClass}>Home</NavLink>
+              </li>
+              <li>
+                <NavLink to="/menu" className={linkClass}>Menu</NavLink>
+              </li>
+              <NavLink
+                to="/login"
+                onClick={() => setOpen(false)}
+                className="px-3 py-1 rounded-full bg-black text-white font-semibold
+             hover:bg-neutral-800 active:scale-95 transition"
+              >
+                Login / Sign up
+              </NavLink>
+            </ul>
+          </nav>
+
+          <button
+            onClick={() => setOpen(!open)}
+            className="md:hidden p-2"
+          >
+            <svg
+              className="w-7 h-7"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M4 6h16M4 12h16M4 18h16"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <div
+          className={`md:hidden overflow-hidden transition-all duration-300 ${open ? "max-h-60 opacity-100" : "max-h-0 opacity-0"
+            }`}
+        >
+          <nav className="px-4 pb-6">
+            <ul className="flex flex-col gap-4 text-lg">
+              <li>
+                <NavLink to="/" className={linkClass} onClick={() => setOpen(false)}>
+                  Home
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/menu" className={linkClass} onClick={() => setOpen(false)}>
+                  Menu
+                </NavLink>
+              </li>
+              <li>
+                <NavLink
+                  to="/login"
+                  onClick={() => setOpen(false)}
+                  className={linkClass}
+                >
+                  Login / Sign up
+                </NavLink>
+              </li>
+            </ul>
+          </nav>
+        </div>
+      </header>
+      <main className="flex flex-col gap-4 p-4 md:p-0 max-w-7xl mx-auto">
+        <section className="h-50 md:h-180 mt-4 bg-[url('/pataXXL.jpg')] bg-no-repeat bg-center bg-contain flex items-center">
+          <div className="bg-black/50 w-full h-55 md:h-110 lg:h-full flex items-center">
+            <div className="max-w-7xl mx-auto px-4">
+              <h1 className="text-white text-2xl md:text-4xl font-bold">
+                Crispy Pata & Fried Chicken
+              </h1>
+              <p className="text-white/90 text-sm md:text-base mt-2 max-w-xl">
+                We serve a variety of crispy pata and fried chicken — perfectly seasoned,
+                golden-crispy, and made fresh for every order.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="flex flex-col gap-4 mx-auto p-4 md:p-0">
+          <h2 className="text-2xl font-bold">Featured menu</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full">
+            {featuredMenu.map(item => (
+              <MenuCard
+                key={item.id}
+                image={item.image_url}
+                name={item.name}
+                description={item.description}
+                weight={item.weight}
+                prepTime={`${item.prep_time} mins`}
+                price={item.price}
+                onAdd={() => alert(`${item.name} is added to cart`, item)}
+              />
+            ))}
+          </div>
+
+          <h2 className="text-2xl font-bold">Menu</h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full">
+            {menu.map(item => (
+              <MenuCard
+                key={item.id}
+                image={item.image_url}
+                name={item.name}
+                description={item.description}
+                weight={item.weight}
+                prepTime={`${item.prep_time} mins`}
+                price={item.price}
+                onAdd={() => alert(`${item.name} is added to cart`, item)}
+              />
+            ))}
+          </div>
+        </section>
+      </main>
+    </>
+  )
+}
+
+export default LandingPage
