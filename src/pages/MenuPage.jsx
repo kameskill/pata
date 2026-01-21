@@ -3,7 +3,7 @@ import CartModal from "../components/CartModal";
 import { useCart } from "../context/Cart";
 import supabase from '../config/Client';
 import { useEffect, useState } from 'react'
-import { NavLink } from 'react-router';
+import { NavLink } from "react-router-dom";
 import MenuCard from '../components/MenuCard';
 
 // ✅ NEW: modal
