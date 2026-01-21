@@ -1,62 +1,54 @@
-import React from 'react'
+import React from "react";
 
-function MenuCard({
+export default function MenuCard({
     image,
     name,
     description,
     weight,
     prepTime,
     price,
-    onAdd
+    onAdd,
+    onImageClick, // ✅ NEW
 }) {
     return (
-        <article className="w-full bg-white rounded-lg border border-gray-300 overflow-hidden hover:shadow-md transition">
+        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+            {/* ✅ IMAGE ONLY CLICK */}
             <img
                 src={image}
                 alt={name}
-                className="w-full h-48 object-cover"
+                onClick={onImageClick}
+                className="w-full h-48 object-cover cursor-pointer"
+                loading="lazy"
             />
 
-            <div className="flex flex-col p-4 gap-6">
-                <header className="flex flex-col gap-1">
-                    <h3 className="text-lg font-bold">{name}</h3>
-                    {description && (
-                        <p className="text-sm text-gray-500 line-clamp-2">
-                            {description}
-                        </p>
-                    )}
+            <div className="p-4 space-y-2">
+                <h3 className="text-lg font-bold">{name}</h3>
 
-                    <div className="flex gap-4 items-center mt-2">
-                        {weight && (
-                            <span className="text-gray-500 text-sm">{weight}</span>
-                        )}
-                        {prepTime && (
-                            <span className="flex items-center gap-2 bg-gray-200 rounded-full px-3 py-1 text-sm">
-                                <i className="fa-regular fa-clock"></i>
-                                {prepTime}
-                            </span>
-                        )}
-                    </div>
-                </header>
+                {description && (
+                    <p className="text-sm text-gray-600">{description}</p>
+                )}
 
-                <footer className="flex justify-between items-center">
-                    <div>
-                        <span className="text-gray-500 text-sm">Starting</span>
-                        <p className="text-lg font-bold">₱ {price}</p>
-                    </div>
+                <div className="flex items-center justify-between text-sm text-gray-500">
+                    <span>{weight}</span>
+                    <span>{prepTime}</span>
+                </div>
 
+                <div className="flex items-center justify-between pt-2">
+                    <p className="text-lg font-bold">₱{price}</p>
+
+                    {/* ✅ ADD TO CART (NO MODAL POPUP) */}
                     <button
-                        onClick={onAdd}
-                        className="rounded-xl px-4 py-2 bg-orange-200 hover:bg-orange-300 active:scale-95 transition"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onAdd?.();
+                        }}
+                        className="px-3 py-1 rounded-full bg-black text-white font-semibold
+              hover:bg-neutral-800 active:scale-95 transition"
                     >
-                        <span className="text-sm font-bold text-orange-600">
-                            + Add
-                        </span>
+                        Add to cart
                     </button>
-                </footer>
+                </div>
             </div>
-        </article>
-    )
+        </div>
+    );
 }
-
-export default MenuCard

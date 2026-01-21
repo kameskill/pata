@@ -6,6 +6,9 @@ import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router';
 import MenuCard from '../components/MenuCard';
 
+// ✅ NEW: modal
+import MenuItemModal from '../components/MenuItemModal';
+
 function MenuPage() {
   const [cartOpen, setCartOpen] = useState(false);
   const { cart, addToCart } = useCart();
@@ -13,6 +16,15 @@ function MenuPage() {
   const [featuredMenu, setFeaturedMenu] = useState([]);
   const [menu, setMenu] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // ✅ modal state
+  const [itemOpen, setItemOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
+
+  const openItemModal = (item) => {
+    setSelectedItem(item);
+    setItemOpen(true);
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -29,8 +41,8 @@ function MenuPage() {
       if (fErr || rErr) {
         console.error(fErr || rErr)
       } else {
-        setFeaturedMenu(featured)
-        setMenu(regular)
+        setFeaturedMenu(featured || [])
+        setMenu(regular || [])
       }
 
       setLoading(false)
@@ -44,6 +56,7 @@ function MenuPage() {
       ? "after:absolute after:left-0 after:bottom-0 after:w-full after:h-[2px] after:bg-black"
       : ""
     }`;
+
   return (
     <>
       <header className="w-full bg-white border-b border-gray-300">
@@ -51,6 +64,7 @@ function MenuPage() {
           <h1 className="text-xl md:text-4xl font-bold">
             Crispy Pata sa A.Luna
           </h1>
+
           <nav className="hidden md:block">
             <ul className="flex gap-6 text-lg">
               <li>
@@ -60,9 +74,7 @@ function MenuPage() {
                 <NavLink to="/menu" className={linkClass}>Menu</NavLink>
               </li>
               <li>
-                <NavLink
-                  to="/login">Log in / Sign up
-                </NavLink>
+                <NavLink to="/login">Log in / Sign up</NavLink>
               </li>
               <li>
                 <button
@@ -133,6 +145,7 @@ function MenuPage() {
                   )}
                 </button>
               </li>
+
               <li>
                 <NavLink to="/" className={linkClass} onClick={() => setOpen(false)}>
                   Home
@@ -144,30 +157,31 @@ function MenuPage() {
                 </NavLink>
               </li>
               <li>
-                <NavLink
-                  to="/login">Log in / Sign up
-                </NavLink>
+                <NavLink to="/login">Log in / Sign up</NavLink>
               </li>
             </ul>
           </nav>
-
         </div>
       </header>
+
       <main className="flex min-h-screen flex-col w-full space-y-6 mt-5">
         <section className="flex flex-col gap-4 mx-auto p-4 md:p-0">
           <h2 className="text-2xl font-bold">Featured menu</h2>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full">
             {featuredMenu.map(item => (
-              <MenuCard
-                key={item.id}
-                image={item.image_url}
-                name={item.name}
-                description={item.description}
-                weight={item.weight}
-                prepTime={`${item.prep_time} mins`}
-                price={item.price}
-                onAdd={() => addToCart(item)}
-              />
+              <div key={item.id}>
+                <MenuCard
+                  image={item.image_url}
+                  name={item.name}
+                  description={item.description}
+                  weight={item.weight}
+                  prepTime={`${item.prep_time} mins`}
+                  price={item.price}
+                  onAdd={() => addToCart(item)}
+                  onImageClick={() => openItemModal(item)} // ✅ picture lang modal
+                />
+              </div>
             ))}
           </div>
 
@@ -175,22 +189,32 @@ function MenuPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full">
             {menu.map(item => (
-              <MenuCard
-                key={item.id}
-                image={item.image_url}
-                name={item.name}
-                description={item.description}
-                weight={item.weight}
-                prepTime={`${item.prep_time} mins`}
-                price={item.price}
-                onAdd={() => addToCart(item)}
-              />
+              <div key={item.id}>
+                <MenuCard
+                  image={item.image_url}
+                  name={item.name}
+                  description={item.description}
+                  weight={item.weight}
+                  prepTime={`${item.prep_time} mins`}
+                  price={item.price}
+                  onAdd={() => addToCart(item)}
+                  onImageClick={() => openItemModal(item)} // ✅ picture lang modal
+                />
+              </div>
             ))}
           </div>
         </section>
+
         <CartModal
           open={cartOpen}
           onClose={() => setCartOpen(false)}
+        />
+
+        {/* ✅ MENU ITEM MODAL */}
+        <MenuItemModal
+          open={itemOpen}
+          onClose={() => setItemOpen(false)}
+          item={selectedItem}
         />
       </main>
     </>

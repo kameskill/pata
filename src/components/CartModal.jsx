@@ -2,14 +2,23 @@ import { useCart } from "../context/Cart";
 import supabase from "../config/Client";
 
 function CartModal({ open, onClose }) {
-    const { cart, removeFromCart, totalPrice, clearCart } = useCart();
+    const {
+        cart,
+        removeFromCart,
+        totalPrice,
+        clearCart,
+        increaseQty,
+        decreaseQty,
+        setQty,
+    } = useCart();
 
     if (!open) return null;
 
     const handleCheckout = async () => {
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            console.log("User:", user);
+            const {
+                data: { user },
+            } = await supabase.auth.getUser();
 
             if (!user) {
                 alert("Please login before checkout!");
@@ -22,7 +31,7 @@ function CartModal({ open, onClose }) {
                 return;
             }
 
-            const { data, error } = await supabase.from("orders").insert([
+            const { error } = await supabase.from("orders").insert([
                 {
                     user_id: user.id,
                     items: cart.map((item) => ({
@@ -42,7 +51,7 @@ function CartModal({ open, onClose }) {
             onClose();
         } catch (err) {
             console.error("Checkout failed:", err);
-            alert("Something went wrong. Check console for details.");
+            alert(err.message || "Something went wrong. Check console for details.");
         }
     };
 
@@ -54,6 +63,7 @@ function CartModal({ open, onClose }) {
                 <button
                     onClick={onClose}
                     className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-xl font-bold"
+                    aria-label="Close"
                 >
                     &times;
                 </button>
@@ -67,21 +77,53 @@ function CartModal({ open, onClose }) {
                         {cart.map((item) => (
                             <div
                                 key={item.id}
-                                className="flex justify-between items-center border-b pb-2"
+                                className="flex justify-between items-start border-b pb-3"
                             >
-                                <div>
-                                    <h3 className="font-semibold">{item.name}</h3>
-                                    <p className="text-sm">
-                                        ₱{item.price} × {item.quantity}
-                                    </p>
+                                <div className="min-w-0">
+                                    <h3 className="font-semibold truncate">{item.name}</h3>
+                                    <p className="text-sm text-gray-600">₱{item.price}</p>
+
+                                    {/* ✅ FIXED: show - / input / + on ALL sizes */}
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <button
+                                            onClick={() => decreaseQty(item.id)}
+                                            className="w-9 h-9 rounded-full border border-gray-300 text-lg font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                            disabled={item.quantity <= 1}
+                                            aria-label="Decrease quantity"
+                                        >
+                                            -
+                                        </button>
+
+                                        <input
+                                            type="number"
+                                            inputMode="numeric"
+                                            min={1}
+                                            value={item.quantity}
+                                            onChange={(e) => setQty(item.id, e.target.value)}
+                                            className="w-16 h-9 text-center border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-black/20"
+                                            aria-label="Quantity"
+                                        />
+
+                                        <button
+                                            onClick={() => increaseQty(item.id)}
+                                            className="w-9 h-9 rounded-full border border-gray-300 text-lg font-bold text-gray-700 hover:bg-gray-50"
+                                            aria-label="Increase quantity"
+                                        >
+                                            +
+                                        </button>
+
+                                        <button
+                                            onClick={() => removeFromCart(item.id)}
+                                            className="ml-2 text-red-500 text-sm hover:underline"
+                                        >
+                                            Remove
+                                        </button>
+                                    </div>
                                 </div>
 
-                                <button
-                                    onClick={() => removeFromCart(item.id)}
-                                    className="text-red-500 text-sm"
-                                >
-                                    Remove
-                                </button>
+                                <div className="font-bold whitespace-nowrap">
+                                    ₱{Number(item.price) * Number(item.quantity)}
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -95,7 +137,7 @@ function CartModal({ open, onClose }) {
 
                     <button
                         onClick={handleCheckout}
-                        className="mt-4 w-full bg-black text-white py-2 rounded"
+                        className="mt-4 w-full bg-black text-white py-2 rounded font-semibold hover:bg-neutral-800 disabled:opacity-60"
                         disabled={cart.length === 0}
                     >
                         Checkout

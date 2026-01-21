@@ -1,45 +1,96 @@
-import React from 'react'
-import { createContext, useContext, useState } from "react"
+import { createContext, useContext, useMemo, useState } from "react";
 
-const CartContext = createContext();
+const CartContext = createContext(null);
 
 export function CartProvider({ children }) {
     const [cart, setCart] = useState([]);
 
     const addToCart = (item) => {
-        setCart(prev => {
-            const existing = prev.find(i => i.id === item.id);
-
-            if (existing) {
-                return prev.map(i =>
-                    i.id === item.id
-                        ? { ...i, quantity: i.quantity + 1 }
-                        : i
+        setCart((prev) => {
+            const exists = prev.find((p) => p.id === item.id);
+            if (exists) {
+                return prev.map((p) =>
+                    p.id === item.id
+                        ? { ...p, quantity: (Number(p.quantity) || 1) + 1 }
+                        : p
                 );
             }
-
             return [...prev, { ...item, quantity: 1 }];
         });
     };
 
+    const increaseQty = (id) => {
+        setCart((prev) =>
+            prev.map((p) =>
+                p.id === id ? { ...p, quantity: (Number(p.quantity) || 1) + 1 } : p
+            )
+        );
+    };
+
+    const decreaseQty = (id) => {
+        setCart((prev) =>
+            prev
+                .map((p) => {
+                    if (p.id !== id) return p;
+                    const newQty = (Number(p.quantity) || 1) - 1;
+                    if (newQty <= 0) return null;
+                    return { ...p, quantity: newQty };
+                })
+                .filter(Boolean)
+        );
+    };
+
+    // ✅ NEW: set quantity directly (mobile-friendly input)
+    // - qty <= 0 => remove
+    // - qty is clamped to at least 1 (if you prefer removing on 0, keep as is)
+    const setQty = (id, qty) => {
+        const nextQty = Number(qty);
+
+        setCart((prev) =>
+            prev
+                .map((p) => {
+                    if (p.id !== id) return p;
+                    if (!Number.isFinite(nextQty) || nextQty <= 0) return null; // remove
+                    return { ...p, quantity: Math.floor(nextQty) };
+                })
+                .filter(Boolean)
+        );
+    };
+
     const removeFromCart = (id) => {
-        setCart(prev => prev.filter(item => item.id !== id));
+        setCart((prev) => prev.filter((p) => p.id !== id));
     };
 
     const clearCart = () => setCart([]);
 
-    const totalPrice = cart.reduce(
-        (sum, item) => sum + item.price * item.quantity,
-        0
-    );
+    const totalPrice = useMemo(() => {
+        return cart.reduce((sum, item) => {
+            const price = Number(item.price) || 0;
+            const qty = Number(item.quantity) || 0;
+            return sum + price * qty;
+        }, 0);
+    }, [cart]);
 
     return (
         <CartContext.Provider
-            value={{ cart, addToCart, removeFromCart, clearCart, totalPrice }}
+            value={{
+                cart,
+                addToCart,
+                increaseQty,
+                decreaseQty,
+                setQty, // ✅ expose it
+                removeFromCart,
+                clearCart,
+                totalPrice,
+            }}
         >
             {children}
         </CartContext.Provider>
     );
 }
 
-export const useCart = () => useContext(CartContext);
+export function useCart() {
+    const ctx = useContext(CartContext);
+    if (!ctx) throw new Error("useCart must be used within CartProvider");
+    return ctx;
+}
