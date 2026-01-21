@@ -6,11 +6,6 @@ function LoginPage() {
     const navigate = useNavigate();
 
     const [checkingSession, setCheckingSession] = useState(true);
-
-    const [activeTab, setActiveTab] = useState("login");
-    const [showLoginPw, setShowLoginPw] = useState(false);
-    const [showRegPw, setShowRegPw] = useState(false);
-
     const [loading, setLoading] = useState(false);
     const [msg, setMsg] = useState({ type: "", text: "" });
 
@@ -27,66 +22,62 @@ function LoginPage() {
     const setError = (text) => setMsg({ type: "error", text });
     const setSuccess = (text) => setMsg({ type: "success", text });
 
+    // -----------------------------
+    // Helpers
+    // -----------------------------
     async function upsertProfile(userId, fullname, phone) {
-        const payload = {
-            user_id: userId,
-            full_name: fullname || "",
-            phone: phone || "",
-            notes: null,
-        };
-
-        const { error } = await supabase
-            .from("profiles")
-            .upsert(payload, { onConflict: "user_id" });
-
+        const { error } = await supabase.from("profiles").upsert(
+            {
+                user_id: userId,
+                full_name: fullname || "",
+                phone: phone || "",
+            },
+            { onConflict: "user_id" }
+        );
         if (error) throw error;
     }
 
     async function redirectByRole(userId) {
-        // If you store admin flag in profiles.is_admin (boolean)
-        const { data: prof, error } = await supabase
+        const { data, error } = await supabase
             .from("profiles")
             .select("is_admin")
             .eq("user_id", userId)
             .single();
 
-        // If profiles row doesn't exist yet, treat as non-admin
-        if (error) {
+        if (error || !data?.is_admin) {
             navigate("/home", { replace: true });
-            return;
+        } else {
+            navigate("/admin/dashboard", { replace: true });
         }
-
-        if (prof?.is_admin) navigate("/admin/dashboard", { replace: true });
-        else navigate("/home", { replace: true });
     }
 
-    // ✅ Redirect if already logged in
+    // -----------------------------
+    // Auto redirect if logged in
+    // -----------------------------
     useEffect(() => {
         let mounted = true;
 
         const check = async () => {
-            try {
-                const { data } = await supabase.auth.getSession();
-                if (!mounted) return;
+            const { data } = await supabase.auth.getSession();
+            if (!mounted) return;
 
-                const user = data?.session?.user;
-                if (user?.id) {
-                    await redirectByRole(user.id);
-                    return;
-                }
-            } finally {
-                if (mounted) setCheckingSession(false);
+            const user = data?.session?.user;
+            if (user?.id) {
+                await redirectByRole(user.id);
             }
+            setCheckingSession(false);
         };
 
         check();
 
-        const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            const user = session?.user;
-            if (user?.id) {
-                await redirectByRole(user.id);
+        const { data: listener } = supabase.auth.onAuthStateChange(
+            async (_event, session) => {
+                const user = session?.user;
+                if (user?.id) {
+                    await redirectByRole(user.id);
+                }
             }
-        });
+        );
 
         return () => {
             mounted = false;
@@ -94,27 +85,12 @@ function LoginPage() {
         };
     }, [navigate]);
 
-    const title = useMemo(
-        () => (activeTab === "login" ? "Log in" : "Create account"),
-        [activeTab]
-    );
-
-    const tabBtn = (isActive) =>
-        [
-            "relative pb-2 font-bold text-sm md:text-base",
-            isActive
-                ? "text-black after:absolute after:left-0 after:bottom-0 after:w-full after:h-[2px] after:bg-black"
-                : "text-gray-500 hover:text-black",
-        ].join(" ");
-
-    const inputClass =
-        "w-full border border-gray-300 rounded-md p-2.5 focus:outline-none focus:ring-2 focus:ring-black/20";
-
-    // ✅ LOGIN
-    async function onSubmitLogin(e) {
-        e.preventDefault();
-        setMsg({ type: "", text: "" });
+    // -----------------------------
+    // LOGIN
+    // -----------------------------
+    async function login() {
         setLoading(true);
+        setMsg({ type: "", text: "" });
 
         try {
             const { data, error } = await supabase.auth.signInWithPassword({
@@ -124,37 +100,30 @@ function LoginPage() {
 
             if (error) throw error;
 
-            const u = data?.user;
-            if (u?.id) {
-                const metaName =
-                    u.user_metadata?.full_name ||
-                    u.user_metadata?.name ||
-                    u.user_metadata?.fullname ||
-                    "";
-
-                const metaPhone = u.user_metadata?.phone || "";
-                await upsertProfile(u.id, metaName, metaPhone);
-
-                // ✅ Redirect admin -> /admin/dashboard
-                await redirectByRole(u.id);
+            const user = data?.user;
+            if (user?.id) {
+                const meta = user.user_metadata || {};
+                await upsertProfile(user.id, meta.full_name, meta.phone);
+                await redirectByRole(user.id);
             }
         } catch (err) {
-            console.error(err);
-            setError(err.message || "Login failed.");
+            setError(err.message || "Login failed");
         } finally {
             setLoading(false);
         }
     }
 
-    // ✅ REGISTER (same as yours; just change final redirect)
-    async function onSubmitRegister(e) {
-        e.preventDefault();
-        setMsg({ type: "", text: "" });
-
-        if (regForm.password !== regForm.confirm) return setError("Passwords do not match.");
-        if (!regForm.agree) return setError("Please agree to the Terms.");
+    // -----------------------------
+    // REGISTER
+    // -----------------------------
+    async function register() {
+        if (regForm.password !== regForm.confirm)
+            return setError("Passwords do not match");
+        if (!regForm.agree)
+            return setError("You must agree to the terms");
 
         setLoading(true);
+        setMsg({ type: "", text: "" });
 
         try {
             const emailRedirectTo = `${window.location.origin}/auth/callback`;
@@ -174,35 +143,33 @@ function LoginPage() {
             if (error) throw error;
 
             if (!data.session) {
-                setSuccess("Registered! Please check your email to confirm your account.");
+                setSuccess("Check your email to confirm your account.");
                 return;
             }
 
-            if (data?.user?.id) {
+            if (data.user?.id) {
                 await upsertProfile(data.user.id, regForm.fullname, regForm.phone);
                 await redirectByRole(data.user.id);
             }
         } catch (err) {
-            console.error(err);
-            setError(err.message || "Register failed.");
+            setError(err.message || "Register failed");
         } finally {
             setLoading(false);
         }
     }
 
+    // -----------------------------
+    // RESEND CONFIRMATION
+    // -----------------------------
     async function resendConfirmation() {
-        setMsg({ type: "", text: "" });
-
-        if (!regForm.email) {
-            setError("Enter your email first (in the register email field).");
-            return;
-        }
+        if (!regForm.email) return setError("Enter your email first");
 
         setLoading(true);
+        setMsg({ type: "", text: "" });
+
         try {
             const emailRedirectTo = `${window.location.origin}/auth/callback`;
 
-            // Supabase v2:
             const { error } = await supabase.auth.resend({
                 type: "signup",
                 email: regForm.email,
@@ -211,10 +178,9 @@ function LoginPage() {
 
             if (error) throw error;
 
-            setSuccess("Confirmation email sent. Please check your inbox/spam.");
+            setSuccess("Confirmation email sent.");
         } catch (err) {
-            console.error(err);
-            setError(err.message || "Failed to resend confirmation email.");
+            setError(err.message || "Resend failed");
         } finally {
             setLoading(false);
         }
