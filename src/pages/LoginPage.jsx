@@ -1,3 +1,4 @@
+// ✅ LoginPage.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import supabase from "../config/Client";
@@ -5,7 +6,10 @@ import supabase from "../config/Client";
 function LoginPage() {
     const navigate = useNavigate();
 
-    const [checkingSession, setCheckingSession] = useState(true);
+    // "checking" -> initial check
+    // "redirecting" -> user already logged in, we are navigating away
+    // "ready" -> show login/register UI
+    const [pageState, setPageState] = useState("checking");
 
     const [activeTab, setActiveTab] = useState("login");
     const [showLoginPw, setShowLoginPw] = useState(false);
@@ -15,8 +19,10 @@ function LoginPage() {
     const [msg, setMsg] = useState({ type: "", text: "" });
 
     const [loginForm, setLoginForm] = useState({ email: "", password: "" });
+
     const [regForm, setRegForm] = useState({
-        fullname: "",
+        first_name: "",
+        last_name: "",
         phone: "",
         email: "",
         password: "",
@@ -27,69 +33,114 @@ function LoginPage() {
     const setError = (text) => setMsg({ type: "error", text });
     const setSuccess = (text) => setMsg({ type: "success", text });
 
-    async function upsertProfile(userId, fullname, phone) {
+    const isValidEmail = (email) =>
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim());
+
+    const cleanPhoneDigits = (v) => String(v || "").replace(/\D/g, "").slice(0, 11);
+    const isValidPHPhone11 = (v) => /^\d{11}$/.test(String(v || ""));
+
+    const fullNameFromReg = useMemo(() => {
+        const fn = regForm.first_name.trim();
+        const ln = regForm.last_name.trim();
+        return [fn, ln].filter(Boolean).join(" ");
+    }, [regForm.first_name, regForm.last_name]);
+
+    const isEmailAlreadyRegisteredError = (err) => {
+        const m = String(err?.message || "").toLowerCase();
+        return (
+            m.includes("already registered") ||
+            m.includes("already exists") ||
+            m.includes("user already") ||
+            m.includes("email already") ||
+            m.includes("duplicate") ||
+            m.includes("unique constraint") ||
+            m.includes("duplicate key")
+        );
+    };
+
+    async function upsertProfile(userId, firstName, lastName, phone) {
+        const full_name = [firstName?.trim(), lastName?.trim()].filter(Boolean).join(" ").trim();
+
         const payload = {
             user_id: userId,
-            full_name: fullname || "",
+            first_name: firstName?.trim() || "",
+            last_name: lastName?.trim() || "",
+            full_name: full_name || "",
             phone: phone || "",
             notes: null,
         };
 
-        const { error } = await supabase
-            .from("profiles")
-            .upsert(payload, { onConflict: "user_id" });
-
+        const { error } = await supabase.from("profiles").upsert(payload, { onConflict: "user_id" });
         if (error) throw error;
     }
 
-    async function redirectByRole(userId) {
-        // If you store admin flag in profiles.is_admin (boolean)
-        const { data: prof, error } = await supabase
-            .from("profiles")
-            .select("is_admin")
-            .eq("user_id", userId)
-            .single();
+    // ✅ safer redirect: if profile fetch fails/slow, fallback to /home
+    async function redirectByRoleSafe(userId) {
+        const timeout = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("role-timeout")), 4000)
+        );
 
-        // If profiles row doesn't exist yet, treat as non-admin
-        if (error) {
+        try {
+            const roleFetch = supabase
+                .from("profiles")
+                .select("is_admin")
+                .eq("user_id", userId)
+                .single();
+
+            const { data: prof } = await Promise.race([roleFetch, timeout]);
+
+            if (prof?.is_admin) navigate("/admin/dashboard", { replace: true });
+            else navigate("/home", { replace: true });
+        } catch (e) {
             navigate("/home", { replace: true });
-            return;
         }
-
-        if (prof?.is_admin) navigate("/admin/dashboard", { replace: true });
-        else navigate("/home", { replace: true });
     }
 
-    // ✅ Redirect if already logged in
+    // ✅ Redirect if already logged in (no infinite loading)
     useEffect(() => {
-        let mounted = true;
+        let alive = true;
+
+        const go = async (userId) => {
+            if (!alive) return;
+
+            // stop the "Loading..." screen immediately
+            setPageState("redirecting");
+
+            // don't block UI waiting for role query
+            redirectByRoleSafe(userId);
+        };
 
         const check = async () => {
             try {
-                const { data } = await supabase.auth.getSession();
-                if (!mounted) return;
+                const { data, error } = await supabase.auth.getSession();
+                if (!alive) return;
 
-                const user = data?.session?.user;
-                if (user?.id) {
-                    await redirectByRole(user.id);
+                if (error) {
+                    setPageState("ready");
                     return;
                 }
-            } finally {
-                if (mounted) setCheckingSession(false);
+
+                const userId = data?.session?.user?.id;
+                if (userId) {
+                    go(userId);
+                    return;
+                }
+
+                setPageState("ready");
+            } catch {
+                if (alive) setPageState("ready");
             }
         };
 
         check();
 
-        const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            const user = session?.user;
-            if (user?.id) {
-                await redirectByRole(user.id);
-            }
+        const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+            const userId = session?.user?.id;
+            if (userId) go(userId);
         });
 
         return () => {
-            mounted = false;
+            alive = false;
             listener?.subscription?.unsubscribe();
         };
     }, [navigate]);
@@ -117,8 +168,11 @@ function LoginPage() {
         setLoading(true);
 
         try {
+            const email = loginForm.email.trim();
+            if (!isValidEmail(email)) throw new Error("Please enter a valid email (must include @).");
+
             const { data, error } = await supabase.auth.signInWithPassword({
-                email: loginForm.email,
+                email,
                 password: loginForm.password,
             });
 
@@ -126,17 +180,20 @@ function LoginPage() {
 
             const u = data?.user;
             if (u?.id) {
-                const metaName =
-                    u.user_metadata?.full_name ||
-                    u.user_metadata?.name ||
-                    u.user_metadata?.fullname ||
+                const metaFirst =
+                    u.user_metadata?.first_name ||
+                    (u.user_metadata?.full_name || "").split(" ").slice(0, -1).join(" ") ||
                     "";
-
+                const metaLast =
+                    u.user_metadata?.last_name ||
+                    (u.user_metadata?.full_name || "").split(" ").slice(-1).join(" ") ||
+                    "";
                 const metaPhone = u.user_metadata?.phone || "";
-                await upsertProfile(u.id, metaName, metaPhone);
 
-                // ✅ Redirect admin -> /admin/dashboard
-                await redirectByRole(u.id);
+                await upsertProfile(u.id, metaFirst, metaLast, metaPhone);
+
+                setPageState("redirecting");
+                redirectByRoleSafe(u.id);
             }
         } catch (err) {
             console.error(err);
@@ -146,11 +203,20 @@ function LoginPage() {
         }
     }
 
-    // ✅ REGISTER (same as yours; just change final redirect)
+    // ✅ REGISTER
     async function onSubmitRegister(e) {
         e.preventDefault();
         setMsg({ type: "", text: "" });
 
+        const first = regForm.first_name.trim();
+        const last = regForm.last_name.trim();
+        const email = regForm.email.trim();
+        const phone = cleanPhoneDigits(regForm.phone);
+
+        if (!first) return setError("First name is required.");
+        if (!last) return setError("Last name is required.");
+        if (!isValidEmail(email)) return setError("Please enter a valid email (must include @).");
+        if (!isValidPHPhone11(phone)) return setError("Phone must be exactly 11 digits (numbers only).");
         if (regForm.password !== regForm.confirm) return setError("Passwords do not match.");
         if (!regForm.agree) return setError("Please agree to the Terms.");
 
@@ -160,18 +226,28 @@ function LoginPage() {
             const emailRedirectTo = `${window.location.origin}/auth/callback`;
 
             const { data, error } = await supabase.auth.signUp({
-                email: regForm.email,
+                email,
                 password: regForm.password,
                 options: {
                     emailRedirectTo,
                     data: {
-                        full_name: regForm.fullname,
-                        phone: regForm.phone,
+                        first_name: first,
+                        last_name: last,
+                        full_name: `${first} ${last}`,
+                        phone,
                     },
                 },
             });
 
-            if (error) throw error;
+            if (error) {
+                if (isEmailAlreadyRegisteredError(error)) {
+                    setError("Email is already registered. Please log in instead.");
+                    setActiveTab("login");
+                    setLoginForm((p) => ({ ...p, email }));
+                    return;
+                }
+                throw error;
+            }
 
             if (!data.session) {
                 setSuccess("Registered! Please check your email to confirm your account.");
@@ -179,8 +255,9 @@ function LoginPage() {
             }
 
             if (data?.user?.id) {
-                await upsertProfile(data.user.id, regForm.fullname, regForm.phone);
-                await redirectByRole(data.user.id);
+                await upsertProfile(data.user.id, first, last, phone);
+                setPageState("redirecting");
+                redirectByRoleSafe(data.user.id);
             }
         } catch (err) {
             console.error(err);
@@ -202,10 +279,9 @@ function LoginPage() {
         try {
             const emailRedirectTo = `${window.location.origin}/auth/callback`;
 
-            // Supabase v2:
             const { error } = await supabase.auth.resend({
                 type: "signup",
-                email: regForm.email,
+                email: regForm.email.trim(),
                 options: { emailRedirectTo },
             });
 
@@ -220,14 +296,22 @@ function LoginPage() {
         }
     }
 
-    // ... keep the rest of your JSX the same
-    if (checkingSession) {
+    if (pageState === "checking") {
         return (
             <div className="min-h-screen grid place-items-center bg-white p-6">
                 <div className="text-gray-700 font-semibold">Loading...</div>
             </div>
         );
     }
+
+    if (pageState === "redirecting") {
+        return (
+            <div className="min-h-screen grid place-items-center bg-white p-6">
+                <div className="text-gray-700 font-semibold">Redirecting...</div>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen bg-black/40 grid place-items-center p-4">
             <div className="w-full max-w-5xl bg-white rounded-xl overflow-hidden border border-gray-300 shadow-xl">
@@ -361,6 +445,7 @@ function LoginPage() {
                                             {showLoginPw ? "Hide" : "Show"}
                                         </button>
                                     </div>
+
                                     <NavLink
                                         to="/forgot-password"
                                         className="text-sm font-semibold text-black hover:underline text-left"
@@ -382,16 +467,30 @@ function LoginPage() {
                         {/* REGISTER */}
                         {activeTab === "register" && (
                             <form onSubmit={onSubmitRegister} className="flex flex-col gap-4">
-                                <div>
-                                    <label className="text-sm font-semibold">Full name</label>
-                                    <input
-                                        className={inputClass}
-                                        type="text"
-                                        placeholder="Full name"
-                                        required
-                                        value={regForm.fullname}
-                                        onChange={(e) => setRegForm((p) => ({ ...p, fullname: e.target.value }))}
-                                    />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-sm font-semibold">First name</label>
+                                        <input
+                                            className={inputClass}
+                                            type="text"
+                                            placeholder="Juan"
+                                            required
+                                            value={regForm.first_name}
+                                            onChange={(e) => setRegForm((p) => ({ ...p, first_name: e.target.value }))}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="text-sm font-semibold">Last name</label>
+                                        <input
+                                            className={inputClass}
+                                            type="text"
+                                            placeholder="Dela Cruz"
+                                            required
+                                            value={regForm.last_name}
+                                            onChange={(e) => setRegForm((p) => ({ ...p, last_name: e.target.value }))}
+                                        />
+                                    </div>
                                 </div>
 
                                 <div>
@@ -400,11 +499,19 @@ function LoginPage() {
                                         className={inputClass}
                                         type="tel"
                                         placeholder="09XXXXXXXXX"
-                                        autoComplete="tel"
+                                        inputMode="numeric"
+                                        pattern="\d{11}"
+                                        maxLength={11}
                                         required
                                         value={regForm.phone}
-                                        onChange={(e) => setRegForm((p) => ({ ...p, phone: e.target.value }))}
+                                        onChange={(e) => {
+                                            const digits = cleanPhoneDigits(e.target.value);
+                                            setRegForm((p) => ({ ...p, phone: digits }));
+                                        }}
                                     />
+                                    <div className="text-xs text-gray-500 mt-1">
+                                        Must be exactly 11 digits (numbers only).
+                                    </div>
                                 </div>
 
                                 <div>
@@ -412,7 +519,7 @@ function LoginPage() {
                                     <input
                                         className={inputClass}
                                         type="email"
-                                        placeholder="Email"
+                                        placeholder="example@gmail.com"
                                         autoComplete="email"
                                         required
                                         value={regForm.email}
@@ -476,20 +583,20 @@ function LoginPage() {
                                 </label>
 
                                 <button
-                                    type="submit"
-                                    disabled={loading}
-                                    className="mt-1 px-4 py-2.5 rounded-full bg-black text-white font-semibold hover:bg-neutral-800 active:scale-95 transition disabled:opacity-60"
-                                >
-                                    {loading ? "Registering..." : "Register"}
-                                </button>
-
-                                <button
                                     type="button"
                                     onClick={resendConfirmation}
                                     disabled={loading}
                                     className="text-sm font-semibold text-black hover:underline text-left disabled:opacity-60"
                                 >
                                     Resend confirmation email
+                                </button>
+
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="mt-1 px-4 py-2.5 rounded-full bg-black text-white font-semibold hover:bg-neutral-800 active:scale-95 transition disabled:opacity-60"
+                                >
+                                    {loading ? "Registering..." : "Register"}
                                 </button>
                             </form>
                         )}

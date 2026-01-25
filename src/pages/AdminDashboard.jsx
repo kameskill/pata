@@ -99,7 +99,7 @@ function AdminDashboard() {
         }
     };
 
-    // fetch user full names for displayed orders
+    // ✅ FIXED: always show full name
     const fetchUserNames = async (ordersList) => {
         try {
             const ids = Array.from(
@@ -116,12 +116,11 @@ function AdminDashboard() {
 
             const map = {};
             (data || []).forEach((p) => {
-                map[p.user_id] = p.full_name || "";
+                map[p.user_id] = p.full_name?.trim() || "Unnamed customer";
             });
 
             setUserNames((prev) => ({ ...prev, ...map }));
         } catch (e) {
-            // If RLS blocks profiles read, orders will still render using fallback user_id
             console.error("fetchUserNames error:", e);
         }
     };
@@ -129,32 +128,12 @@ function AdminDashboard() {
     useEffect(() => {
         if (!isAdmin) return;
         fetchOrders();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isAdmin]);
 
-    // when orders change, load names
     useEffect(() => {
         if (!isAdmin) return;
         fetchUserNames(orders);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [orders, isAdmin]);
-
-    // Optional realtime refresh
-    useEffect(() => {
-        if (!isAdmin) return;
-
-        const channel = supabase
-            .channel("admin-orders")
-            .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => {
-                fetchOrders();
-            })
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isAdmin]);
 
     const filtered = useMemo(() => {
         const text = q.trim().toLowerCase();
@@ -188,10 +167,8 @@ function AdminDashboard() {
 
         const id = String(orderId);
         const status = safeLower(nextStatus);
-
         const prev = ordersRef.current;
 
-        // optimistic UI
         setOrders((cur) => cur.map((o) => (String(o.id) === id ? { ...o, status, _saving: true } : o)));
 
         try {
@@ -203,14 +180,11 @@ function AdminDashboard() {
             );
 
             setSuccess("Status updated.");
-            // ✅ ensure list + counts match DB
             await fetchOrders();
         } catch (e) {
             console.error(e);
             setOrders(prev);
-
-            const detail = e?.details ? ` (${e.details})` : "";
-            setError((e?.message || "Failed to update status.") + detail);
+            setError(e?.message || "Failed to update status.");
         }
     };
 
@@ -325,7 +299,7 @@ function AdminDashboard() {
                         })}
                     </div>
 
-                    <div className="md:ml-auto w-full md:w-[360px]">
+                    <div className="md:ml-auto w-full md:w-90">
                         <input
                             value={q}
                             onChange={(e) => setQ(e.target.value)}
@@ -380,7 +354,7 @@ function AdminDashboard() {
                                             </div>
                                         </div>
 
-                                        <div className="w-full md:w-[260px]">
+                                        <div className="w-full md:w-65">
                                             <label className="text-xs font-semibold text-gray-600">Update status</label>
                                             <select
                                                 value={status}
@@ -407,7 +381,7 @@ function AdminDashboard() {
                                     <div className="mt-4 border-t pt-4">
                                         <div className="text-sm font-bold mb-2">Items</div>
                                         <div className="overflow-x-auto">
-                                            <table className="min-w-[520px] w-full text-sm border-collapse">
+                                            <table className="min-w-130 w-full text-sm border-collapse">
                                                 <thead>
                                                     <tr className="text-left text-gray-600">
                                                         <th className="py-2 pr-3">Name</th>

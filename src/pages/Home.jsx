@@ -55,6 +55,31 @@ function Home() {
     const setError = (text) => setMsg({ type: "error", text });
     const setSuccess = (text) => setMsg({ type: "success", text });
 
+    // ✅ Build FULL NAME from first_name + last_name (with fallbacks)
+    const getFullNameFromUser = (u) => {
+        const first =
+            u?.user_metadata?.first_name ||
+            u?.user_metadata?.firstname ||
+            u?.user_metadata?.firstName ||
+            "";
+
+        const last =
+            u?.user_metadata?.last_name ||
+            u?.user_metadata?.lastname ||
+            u?.user_metadata?.lastName ||
+            "";
+
+        const combined = `${first} ${last}`.trim();
+
+        return (
+            combined ||
+            u?.user_metadata?.full_name ||
+            u?.user_metadata?.fullname ||
+            u?.user_metadata?.name ||
+            ""
+        );
+    };
+
     const cartBadgeCount = useMemo(
         () => cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0),
         [cart]
@@ -83,7 +108,7 @@ function Home() {
     const ensureProfile = async (u) => {
         const { data, error } = await supabase
             .from("profiles")
-            .select("user_id")
+            .select("user_id, full_name")
             .eq("user_id", u.id)
             .maybeSingle();
 
@@ -94,9 +119,11 @@ function Home() {
 
         if (data) return;
 
+        const fullName = getFullNameFromUser(u);
+
         const payload = {
             user_id: u.id,
-            full_name: u.user_metadata?.full_name || "",
+            full_name: fullName || "",
             phone: u.user_metadata?.phone || "",
             notes: null,
         };
@@ -143,18 +170,26 @@ function Home() {
 
             setUser(u);
 
-            const metaName =
-                u?.user_metadata?.full_name ||
-                u?.user_metadata?.name ||
-                u?.user_metadata?.fullname ||
-                "";
+            const metaName = getFullNameFromUser(u);
 
+            // set local profile name early (UI feels instant)
             if (metaName) {
                 setProfile((p) => ({ ...p, full_name: p.full_name || metaName }));
             }
 
             await ensureProfile(u);
-            await fetchProfile(u);
+
+            // fetch profile row
+            const p = await fetchProfile(u);
+
+            // ✅ if DB full_name is empty, update it using metaName
+            if (metaName && (!p?.full_name || !p.full_name.trim())) {
+                setProfile((prev) => ({ ...prev, full_name: metaName }));
+                const { error } = await supabase
+                    .from("profiles")
+                    .upsert({ user_id: u.id, full_name: metaName }, { onConflict: "user_id" });
+                if (error) console.error(error);
+            }
         };
 
         init();
@@ -343,8 +378,6 @@ function Home() {
         );
     }
 
-
-
     return (
         <div className="min-h-screen bg-white pb-16 md:pb-0">
             {/* ✅ Modal */}
@@ -429,21 +462,38 @@ function Home() {
 
                         <button
                             onClick={() => setOpen((v) => !v)}
-                            className="p-2 rounded-md border border-gray-200"
+                            className="p-2 rounded-md border border-gray-200 flex items-center justify-center"
+                            aria-label="Toggle menu"
                         >
-                            <svg
-                                className="w-6 h-6"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth={2}
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M4 6h16M4 12h16M4 18h16"
-                                />
-                            </svg>
+                            {open ? (
+                                <svg
+                                    className="w-6 h-6"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth={2}
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        d="M6 18L18 6M6 6l12 12"
+                                    />
+                                </svg>
+                            ) : (
+                                <svg
+                                    className="w-6 h-6"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth={2}
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        d="M4 6h16M4 12h16M4 18h16"
+                                    />
+                                </svg>
+                            )}
                         </button>
                     </div>
                 </div>
@@ -677,7 +727,6 @@ function Home() {
                                         </button>
                                     </div>
 
-                                    {/* ✅ keep the note */}
                                     <div className="mt-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
                                         {checkout.payment === "gcash" ? (
                                             <>
@@ -759,7 +808,9 @@ function Home() {
                                 {orders.map((o) => (
                                     <div key={o.id} className="rounded-lg border border-gray-200 p-4">
                                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                                            <div className="font-bold">Order #{String(o.id).slice(0, 8)}</div>
+                                            <div className="font-bold">
+                                                Order #{String(o.id).slice(0, 8)}
+                                            </div>
                                             <div className="text-sm text-gray-600">
                                                 {o.created_at ? new Date(o.created_at).toLocaleString() : ""}
                                             </div>
@@ -842,7 +893,7 @@ function Home() {
                                             }
                                             className="mt-1 w-full border border-gray-300 rounded-md p-2.5 focus:outline-none focus:ring-2 focus:ring-black/20"
                                             placeholder="Juan Dela Cruz"
-                                        />
+                                        disabled/>
                                     </div>
 
                                     <div>
